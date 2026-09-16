@@ -13,12 +13,18 @@ import { WorkshopCanvas } from './components/WorkshopCanvas'
 
 export default function App() {
   const [state, setState] = useState<GameState>(() => loadOrInitial())
+  const [focusedStation, setFocusedStation] = useState<StationId | null>(null)
 
   useEffect(() => {
     saveToLocalStorage(state)
   }, [state])
 
+  const onFocusStation = useCallback((station: StationId) => {
+    setFocusedStation(station)
+  }, [])
+
   const onAttempt = useCallback((station: StationId) => {
+    setFocusedStation(station)
     setState((s) => attemptStation(s, station))
   }, [])
 
@@ -28,6 +34,7 @@ export default function App() {
 
   const onReset = useCallback(() => {
     clearSaved()
+    setFocusedStation(null)
     setState(resetGame())
   }, [])
 
@@ -47,8 +54,17 @@ export default function App() {
       </header>
 
       <main className="layout">
-        <WorkshopCanvas state={state} onAttempt={onAttempt} />
-        <AxiomTray state={state} onSubmit={onSubmitAxiom} />
+        <WorkshopCanvas
+          state={state}
+          focusedStation={focusedStation}
+          onFocus={onFocusStation}
+          onAttempt={onAttempt}
+        />
+        <AxiomTray
+          state={state}
+          focusedStation={focusedStation}
+          onSubmit={onSubmitAxiom}
+        />
         <ExperimentLog state={state} />
       </main>
 
@@ -58,4 +74,3 @@ export default function App() {
     </div>
   )
 }
-

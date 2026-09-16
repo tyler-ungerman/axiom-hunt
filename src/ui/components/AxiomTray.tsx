@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import type { AxiomCard, GameState } from '../../sim/types'
+import type { AxiomCard, GameState, StationId } from '../../sim/types'
+import { STATION_LABELS } from '../../sim/types'
 import { suggestAxiomFromNL } from '../../sim/suggest'
 
 interface Props {
   state: GameState
+  focusedStation: StationId | null
   onSubmit: (text: string) => void
 }
 
-export function AxiomTray({ state, onSubmit }: Props) {
+export function AxiomTray({ state, focusedStation, onSubmit }: Props) {
   const [draft, setDraft] = useState('craft furnace: copper_ore + heat -> copper_ingot')
   const [nl, setNl] = useState('')
 
@@ -23,6 +25,12 @@ export function AxiomTray({ state, onSubmit }: Props) {
           the simulator — they stay active and stack.
         </p>
       </header>
+
+      <p className="focus-hint" data-testid="focused-station">
+        {focusedStation
+          ? `NL helper focused on: ${STATION_LABELS[focusedStation]} (${focusedStation})`
+          : 'NL helper: no station focused — select a station in the workshop'}
+      </p>
 
       <label className="field">
         <span>Axiom DSL</span>
@@ -40,18 +48,22 @@ export function AxiomTray({ state, onSubmit }: Props) {
         </button>
       </div>
 
-      <details className="nl-suggest">
-        <summary>NL suggest (heuristic template only)</summary>
+      <details className="nl-suggest" open>
+        <summary>NL suggest (heuristic · station-aware)</summary>
         <textarea
           value={nl}
           onChange={(e) => setNl(e.target.value)}
           rows={2}
-          placeholder="maybe lighting the furnace needs oil…"
+          placeholder={
+            focusedStation
+              ? `describe ${focusedStation}… (or leave blank to fill that station’s template)`
+              : 'maybe lighting the furnace needs oil…'
+          }
         />
         <button
           type="button"
           className="secondary"
-          onClick={() => setDraft(suggestAxiomFromNL(nl))}
+          onClick={() => setDraft(suggestAxiomFromNL(nl, focusedStation))}
         >
           Fill DSL from text
         </button>

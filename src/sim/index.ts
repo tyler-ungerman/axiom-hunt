@@ -1,6 +1,7 @@
 export * from './types'
 export * from './groundTruth'
 export * from './parser'
+export * from './hints'
 export * from './engine'
 export * from './persist'
 export * from './suggest'

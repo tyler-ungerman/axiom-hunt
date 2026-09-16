@@ -1,4 +1,5 @@
 import { GROUND_TRUTH, getRule, ruleForStation } from './groundTruth'
+import { describeAxiomRejectDiff, describeCraftFail, describeUnlockRequirement } from './hints'
 import { matchGroundTruth, parseAxiom } from './parser'
 import type {
   AxiomCard,
@@ -62,15 +63,6 @@ function hasItems(inv: Inventory, need: Partial<Record<ItemId, number>>): boolea
   return true
 }
 
-function missingItems(inv: Inventory, need: Partial<Record<ItemId, number>>): string[] {
-  const missing: string[] = []
-  for (const [k, n] of Object.entries(need) as [ItemId, number][]) {
-    const have = inv[k] ?? 0
-    if (have < n) missing.push(`${k} (need ${n}, have ${have})`)
-  }
-  return missing
-}
-
 function consumeAndProduce(
   inv: Inventory,
   inputs: Partial<Record<ItemId, number>>,
@@ -100,34 +92,15 @@ export function attemptStation(state: GameState, station: StationId): GameState 
     return appendLog(state, 'sim', `No known process at station "${station}".`)
   }
 
-  if (!isRuleUnlocked(state, truth.id)) {
-    const hint =
-      station === 'light'
-        ? 'Ignition procedure unknown. Write an axiom describing how to light the furnace.'
-        : station === 'gate'
-          ? 'Gate mechanism locked. You need an activated axiom for how the gate opens.'
-          : `Unknown recipe at ${station}. Experiment, then write an axiom card matching what you observe.`
-    let msg = `Attempt at ${station}: FAILED — ${hint}`
-    // Informative failure: if player has partial materials, say so without revealing full recipe
-    const missing = missingItems(state.inventory, truth.inputs)
-    if (missing.length > 0 && missing.length < Object.keys(truth.inputs).length) {
-      msg += ` Observation: some materials present, but the process still refuses — something is incomplete or unlearned.`
-    } else if (Object.keys(truth.inputs).length > 0 && !hasItems(state.inventory, truth.inputs)) {
-      msg += ` Observation: the station does not react — ingredients or conditions seem wrong.`
-    } else if (hasItems(state.inventory, truth.inputs)) {
-      msg += ` Observation: materials seem ready, yet the craft will not run — the rule is not yet in the simulator.`
-    }
-    return appendLog(state, 'sim', msg)
+  const unlocked = isRuleUnlocked(state, truth.id)
+
+  if (!unlocked) {
+    return appendLog(state, 'sim', describeCraftFail(station, truth, state.inventory, false))
   }
 
   // Unlocked: execute deterministic ground truth
   if (!hasItems(state.inventory, truth.inputs)) {
-    const missing = missingItems(state.inventory, truth.inputs)
-    return appendLog(
-      state,
-      'sim',
-      `Attempt at ${station}: FAILED — missing ${missing.join(', ')}.`,
-    )
+    return appendLog(state, 'sim', describeCraftFail(station, truth, state.inventory, true))
   }
 
   const nextInv = consumeAndProduce(state.inventory, truth.inputs, truth.outputs)
@@ -172,29 +145,31 @@ export function submitAxiom(state: GameState, text: string): GameState {
   }
 
   if (!parsed.ok) {
+    const reason = `Parse/syntax error: ${parsed.error}`
     const card: AxiomCard = {
       ...cardBase,
       status: 'rejected',
-      reason: `Parse error: ${parsed.error}`,
+      reason,
     }
     let next = { ...state, axioms: [...state.axioms, card] }
-    next = appendLog(next, 'axiom', `Rejected axiom "${text.trim()}": ${parsed.error}`)
+    next = appendLog(next, 'axiom', `Rejected axiom "${text.trim()}": ${reason}`)
     return next
   }
 
   const match = matchGroundTruth(parsed)
   if (!match) {
+    const diff = describeAxiomRejectDiff(parsed)
     const card: AxiomCard = {
       ...cardBase,
       normalized: parsed.normalized,
       status: 'rejected',
-      reason: 'Does not match world — false physics will not execute.',
+      reason: diff,
     }
     let next = { ...state, axioms: [...state.axioms, card] }
     next = appendLog(
       next,
       'axiom',
-      `Rejected axiom "${parsed.normalized}": does not match the Copper Workshop. Physics unchanged.`,
+      `Rejected axiom "${parsed.normalized}": ${diff}`,
     )
     return next
   }
@@ -247,4 +222,11 @@ export function describeUnlockProgress(state: GameState): string {
   return `${state.unlockedRuleIds.length} / ${GROUND_TRUTH.length} processes unlocked`
 }
 
-export { GROUND_TRUTH, getRule }
+/** Unlock requirement line for a station button (always shown). */
+export function stationUnlockLabel(state: GameState, station: StationId): string {
+  const rule = ruleForStation(station)
+  if (!rule) return 'No process'
+  return describeUnlockRequirement(station, isRuleUnlocked(state, rule.id))
+}
+
+export { GROUND_TRUTH, getRule, describeUnlockRequirement }

@@ -1,6 +1,6 @@
 import type { GameState, StationId } from '../../sim/types'
 import { ITEM_LABELS, STATION_LABELS } from '../../sim/types'
-import { STATIONS, isRuleUnlocked } from '../../sim/engine'
+import { STATIONS, isRuleUnlocked, stationUnlockLabel } from '../../sim/engine'
 import { ruleForStation } from '../../sim/groundTruth'
 
 const STATION_GLYPH: Record<StationId, string> = {
@@ -14,15 +14,20 @@ const STATION_GLYPH: Record<StationId, string> = {
 
 interface Props {
   state: GameState
+  focusedStation: StationId | null
+  onFocus: (station: StationId) => void
   onAttempt: (station: StationId) => void
 }
 
-export function WorkshopCanvas({ state, onAttempt }: Props) {
+export function WorkshopCanvas({ state, focusedStation, onFocus, onAttempt }: Props) {
   return (
     <section className="panel workshop" aria-label="Copper Workshop">
       <header className="panel-header">
         <h2>Copper Workshop</h2>
-        <p className="muted">Click a station to attempt a craft. Locked processes need an activated axiom.</p>
+        <p className="muted">
+          Select a station to focus the NL helper, then attempt a craft. Unlock requirements stay
+          visible on every locked station.
+        </p>
       </header>
 
       <div className="workshop-floor">
@@ -30,22 +35,39 @@ export function WorkshopCanvas({ state, onAttempt }: Props) {
           const rule = ruleForStation(station)
           const unlocked = rule ? isRuleUnlocked(state, rule.id) : false
           const isGate = station === 'gate'
+          const focused = focusedStation === station
+          const unlockReq = stationUnlockLabel(state, station)
           return (
-            <button
+            <div
               key={station}
-              type="button"
-              className={`station ${unlocked ? 'unlocked' : 'locked'} ${isGate && state.gateOpen ? 'gate-open' : ''}`}
-              onClick={() => onAttempt(station)}
-              disabled={state.won && isGate}
+              className={`station-card ${unlocked ? 'unlocked' : 'locked'} ${focused ? 'focused' : ''} ${isGate && state.gateOpen ? 'gate-open' : ''}`}
             >
-              <span className="station-glyph" aria-hidden>
-                {STATION_GLYPH[station]}
-              </span>
-              <span className="station-name">{STATION_LABELS[station]}</span>
-              <span className={`badge ${unlocked ? 'ok' : 'warn'}`}>
-                {isGate && state.gateOpen ? 'OPEN' : unlocked ? 'axiom active' : 'unknown recipe'}
-              </span>
-            </button>
+              <button
+                type="button"
+                className="station-select"
+                onClick={() => onFocus(station)}
+                aria-pressed={focused}
+              >
+                <span className="station-glyph" aria-hidden>
+                  {STATION_GLYPH[station]}
+                </span>
+                <span className="station-name">{STATION_LABELS[station]}</span>
+                <span className={`badge ${unlocked ? 'ok' : 'warn'}`}>
+                  {isGate && state.gateOpen ? 'OPEN' : unlocked ? 'axiom active' : 'locked'}
+                </span>
+              </button>
+              <p className="unlock-req" title={unlockReq}>
+                {unlockReq}
+              </p>
+              <button
+                type="button"
+                className="station-attempt primary"
+                onClick={() => onAttempt(station)}
+                disabled={state.won && isGate}
+              >
+                Attempt
+              </button>
+            </div>
           )
         })}
       </div>
@@ -66,9 +88,6 @@ export function WorkshopCanvas({ state, onAttempt }: Props) {
             ] as const
           ).map((id) => {
             const n = state.inventory[id]
-            if (n <= 0 && id !== 'heat') {
-              // still show starting-relevant empties lightly
-            }
             return (
               <li key={id} className={n > 0 ? 'has' : 'empty'}>
                 <span className="inv-label">{ITEM_LABELS[id]}</span>

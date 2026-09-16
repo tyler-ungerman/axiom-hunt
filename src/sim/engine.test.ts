@@ -3,9 +3,11 @@ import {
   attemptStation,
   createInitialState,
   isRuleUnlocked,
+  stationUnlockLabel,
   submitAxiom,
 } from './engine'
 import { deserializeState, serializeState, STORAGE_KEY } from './persist'
+import { suggestAxiomFromNL } from './suggest'
 import type { GameState } from './types'
 
 function withMemoryStorage() {
@@ -22,18 +24,34 @@ function withMemoryStorage() {
 }
 
 describe('Axiom Hunt discovery loop', () => {
-  it('1. without axioms, crafts fail informatively', () => {
+  it('1. without axioms, crafts fail with specific expected I/O hints', () => {
     let state = createInitialState()
     state = attemptStation(state, 'furnace')
     const last = state.log[state.log.length - 1]
     expect(last.kind).toBe('sim')
-    expect(last.message).toMatch(/FAILED|Unknown recipe|unknown/i)
+    expect(last.message).toMatch(/FAILED/i)
+    expect(last.message).toMatch(/furnace needs|furnace expects/i)
+    expect(last.message).toMatch(/copper_ore/)
+    expect(last.message).toMatch(/heat/)
+    expect(last.message).toMatch(/you have/i)
     expect(state.inventory.copper_ingot).toBe(0)
     expect(isRuleUnlocked(state, 'smelt_ingot')).toBe(false)
 
     state = attemptStation(state, 'draw')
-    expect(state.log[state.log.length - 1].message).toMatch(/FAILED|Unknown/i)
+    expect(state.log[state.log.length - 1].message).toMatch(/FAILED/i)
+    expect(state.log[state.log.length - 1].message).toMatch(/copper_ingot|draw expects|draw needs/i)
     expect(state.inventory.wire).toBe(0)
+  })
+
+  it('1b. unlocked craft missing ingredients names what is missing', () => {
+    let state = createInitialState()
+    state = submitAxiom(state, 'craft furnace: copper_ore + heat -> copper_ingot')
+    // no heat yet
+    state = attemptStation(state, 'furnace')
+    const msg = state.log[state.log.length - 1].message
+    expect(msg).toMatch(/FAILED/i)
+    expect(msg).toMatch(/furnace needs copper_ore \+ heat/i)
+    expect(msg).toMatch(/you have copper_ore but no heat/i)
   })
 
   it('2. activating correct furnace axiom allows ingot craft', () => {
@@ -84,21 +102,34 @@ describe('Axiom Hunt discovery loop', () => {
     expect(state.won).toBe(true)
   })
 
-  it('4. wrong axiom does not invent new recipes', () => {
+  it('4. wrong axiom does not invent new recipes and gets targeted reject diff', () => {
     let state = createInitialState()
     state = submitAxiom(state, 'craft furnace: oil -> wire')
     expect(state.axioms[0].status).toBe('rejected')
+    expect(state.axioms[0].reason).toMatch(/station furnace correct/i)
+    expect(state.axioms[0].reason).toMatch(/inputs differ/i)
     expect(state.unlockedRuleIds).toHaveLength(0)
+    expect(state.log[state.log.length - 1].message).toMatch(/inputs differ/i)
 
     state = attemptStation(state, 'furnace')
     expect(state.inventory.wire).toBe(0)
     expect(state.inventory.copper_ingot).toBe(0)
 
-    // Even with materials for a fake recipe, physics unchanged
-    state = submitAxiom(state, 'craft draw: oil + copper_ore -> cut_key')
-    expect(state.axioms[state.axioms.length - 1].status).toBe('rejected')
+    // Wrong station: I/O that belongs at furnace
+    state = submitAxiom(state, 'craft draw: copper_ore + heat -> copper_ingot')
+    const card = state.axioms[state.axioms.length - 1]
+    expect(card.status).toBe('rejected')
+    expect(card.reason).toMatch(/wrong station/i)
+    expect(card.reason).toMatch(/furnace/i)
     state = attemptStation(state, 'draw')
     expect(state.inventory.cut_key).toBe(0)
+  })
+
+  it('4b. syntax errors are called out as parse/syntax', () => {
+    let state = createInitialState()
+    state = submitAxiom(state, 'maybe melt stuff somehow')
+    expect(state.axioms[0].status).toBe('rejected')
+    expect(state.axioms[0].reason).toMatch(/Parse\/syntax error/i)
   })
 
   it('5. localStorage round-trip restores state', () => {
@@ -133,6 +164,25 @@ describe('Axiom Hunt discovery loop', () => {
     // draw still fails for missing ingot but rule stays unlocked
     state = attemptStation(state, 'draw')
     expect(isRuleUnlocked(state, 'draw_wire')).toBe(true)
-    expect(state.log[state.log.length - 1].message).toMatch(/missing|FAILED/i)
+    expect(state.log[state.log.length - 1].message).toMatch(/missing|FAILED|needs|no copper_ingot/i)
+  })
+
+  it('unlock requirements stay visible for locked stations', () => {
+    const state = createInitialState()
+    const label = stationUnlockLabel(state, 'furnace')
+    expect(label).toMatch(/Needs activated axiom/i)
+    expect(label).toMatch(/furnace/)
+    expect(label).toMatch(/copper_ore/)
+  })
+
+  it('NL suggest is station-aware when focused', () => {
+    expect(suggestAxiomFromNL('', 'draw')).toBe('craft draw: copper_ingot -> wire')
+    expect(suggestAxiomFromNL('something vague', 'gate')).toBe(
+      'action gate: cut_key -> gate_open',
+    )
+    // Strong keyword still wins over focus
+    expect(suggestAxiomFromNL('ignite furnace with oil', 'draw')).toBe(
+      'action light: oil -> heat',
+    )
   })
 })

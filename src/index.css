@@ -152,38 +152,76 @@ body {
   margin: 1rem 0;
 }
 
-.station {
+.station-card {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 0.35rem;
-  padding: 0.9rem;
+  align-items: stretch;
+  gap: 0.45rem;
+  padding: 0.75rem;
   border-radius: 10px;
   border: 2px solid var(--border);
   background: var(--bg-elev);
   color: var(--text);
-  cursor: pointer;
   text-align: left;
   transition: border-color 0.15s, transform 0.1s;
 }
 
-.station:hover:not(:disabled) {
+.station-card:hover {
   border-color: var(--accent);
   transform: translateY(-1px);
 }
 
-.station.locked {
+.station-card.locked {
   border-style: dashed;
-  opacity: 0.92;
+  opacity: 0.95;
 }
 
-.station.unlocked {
+.station-card.unlocked {
   border-color: var(--ok);
 }
 
-.station.gate-open {
+.station-card.focused {
+  border-color: var(--obs);
+  box-shadow: 0 0 0 1px var(--obs);
+}
+
+.station-card.gate-open {
   border-color: var(--accent);
   background: #2a2410;
+}
+
+.station-select {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  width: 100%;
+  padding: 0.15rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.station-attempt {
+  align-self: stretch;
+}
+
+.unlock-req {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--warn);
+  background: #1a1610;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+}
+
+.station-card.unlocked .unlock-req {
+  color: var(--ok);
+  background: #101a14;
 }
 
 .station-glyph {
@@ -192,6 +230,16 @@ body {
 
 .station-name {
   font-weight: 650;
+}
+
+.focus-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: var(--obs);
+  background: #121820;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.55rem;
 }
 
 .inventory {
